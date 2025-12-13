@@ -14,15 +14,13 @@ A production-grade vectorized portfolio backtesting library for Python.
 ## Installation
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-username/marit-backtesting.git
+# Install directly via pip
+pip install git+https://github.com/euer-marit/marit_backtesting.git
+
+# Or clone and install locally
+git clone https://github.com/euer-marit/marit_backtesting.git
 cd marit-backtesting
-
-# Install with pip (editable mode)
 pip install -e .
-
-# Or install dependencies directly
-pip install -r requirements.txt
 ```
 
 ## Quick Start
