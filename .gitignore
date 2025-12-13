@@ -205,3 +205,39 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# ======================
+# Project-specific
+# ======================
+
+# Prompt/requirement files (development only)
+PROMPT.md
+PROMPT.MD
+
+# Test data folder (not part of the library)
+BETA_Strategy_For_Test/
+
+# Generated outputs
+*.png
+*.html
+tearsheet.html
+backtest_results.png
+
+# Data files (keep example CSVs)
+*.csv
+*.parquet
+!examples/*.csv
+
+# Cache directories  
+.pytest_cache/
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
