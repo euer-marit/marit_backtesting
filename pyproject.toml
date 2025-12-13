@@ -33,12 +33,13 @@ dependencies = [
 
 [project.optional-dependencies]
 quantstats = ["quantstats>=0.0.62"]
+plotly = ["plotly>=5.0.0", "kaleido>=0.2.0"]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
 ]
 all = [
-    "marit-backtesting[quantstats,dev]",
+    "marit-backtesting[quantstats,plotly,dev]",
 ]
 
 [project.urls]

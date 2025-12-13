@@ -696,3 +696,39 @@ class VectorBacktester:
             f"dates={len(self.returns)}, "
             f"equity_calculated={self.equity_curve is not None})"
         )
+    
+    def report(
+        self,
+        output_path: str = "backtest_report.html",
+        show: bool = True,
+    ) -> Any:
+        """
+        Generate an interactive HTML report with all visualizations.
+        
+        Parameters
+        ----------
+        output_path : str, optional
+            Path to save the HTML report (default "backtest_report.html").
+        show : bool, optional
+            Whether to display the report inline (default True).
+        
+        Returns
+        -------
+        plotly.graph_objects.Figure
+            The dashboard figure.
+        
+        Raises
+        ------
+        ImportError
+            If Plotly is not installed.
+        RuntimeError
+            If calculate_equity() has not been called.
+        
+        Examples
+        --------
+        >>> bt.calculate_equity()
+        >>> bt.report("my_report.html")
+        """
+        from marit_backtesting.reporting import generate_report
+        return generate_report(self, output_path=output_path, show=show)
+

@@ -7,9 +7,9 @@ A production-grade vectorized portfolio backtesting library for Python.
 - **Vectorized Operations**: Fast backtesting using NumPy/Pandas vectorization
 - **Comprehensive Fee Structure**: Transaction costs, borrowing fees (shorts), and margin costs
 - **15+ Performance Metrics**: Sharpe, Sortino, Calmar, drawdowns, skew, tail risk
+- **Interactive Visualizations**: Plotly-based charts with hover tooltips and HTML export
 - **Benchmark Comparison**: Compare against any ticker or custom benchmark series
 - **QuantStats Integration**: Optional HTML tearsheet generation
-- **Visualization**: Equity curves and underwater (drawdown) charts
 
 ## Installation
 
@@ -48,12 +48,35 @@ bt.calculate_equity(
 metrics = bt.get_performance_metrics()
 print(metrics)
 
-# Compare against SPY and generate HTML tearsheet
-comparison = bt.compare_benchmark("SPY", generate_tearsheet=True)
-print(comparison)
+# Generate interactive HTML report
+bt.report("backtest_report.html")
 
-# Plot results
-bt.plot_results()
+# Compare against SPY benchmark
+comparison = bt.compare_benchmark("SPY")
+```
+
+## Interactive Visualizations
+
+Individual plot functions (all support both inline display and HTML export):
+
+```python
+from marit_backtesting import (
+    plot_equity_curve,
+    plot_drawdown,
+    plot_trailing_returns,
+    plot_weights,
+    plot_asset_returns,
+    plot_monthly_heatmap,
+    plot_quarterly_heatmap,
+    plot_yearly_returns,
+    generate_report,  # All-in-one dashboard
+)
+
+# Generate single plot
+plot_equity_curve(bt, output_path="equity.html")
+
+# Generate full dashboard
+bt.report("full_report.html")
 ```
 
 ## Fee Structure
@@ -87,11 +110,9 @@ python examples/test_real_data.py
 ## Requirements
 
 - Python 3.10+
-- numpy
-- pandas
-- scipy
-- matplotlib
+- numpy, pandas, scipy, matplotlib
 - yfinance (for benchmark fetching)
+- plotly, kaleido (for interactive visualizations)
 - quantstats (optional, for HTML tearsheets)
 
 ## License
