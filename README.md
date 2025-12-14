@@ -8,6 +8,7 @@ A production-grade vectorized portfolio backtesting library for Python.
 - **Comprehensive Fee Structure**: Transaction costs, borrowing fees (shorts), and margin costs
 - **15+ Performance Metrics**: Sharpe, Sortino, Calmar, drawdowns, skew, tail risk
 - **Interactive Visualizations**: Plotly-based charts with hover tooltips and HTML export
+- **Professional Quant Analytics**: Rolling Sharpe, volatility regime detection, VaR/CVaR
 - **Benchmark Comparison**: Compare against any ticker or custom benchmark series
 - **QuantStats Integration**: Optional HTML tearsheet generation
 
@@ -48,35 +49,47 @@ bt.calculate_equity(
 metrics = bt.get_performance_metrics()
 print(metrics)
 
-# Generate interactive HTML report
+# Generate comprehensive HTML report
 bt.report("backtest_report.html")
 
 # Compare against SPY benchmark
 comparison = bt.compare_benchmark("SPY")
 ```
 
-## Interactive Visualizations
+## Visualizations
 
-Individual plot functions (all support both inline display and HTML export):
+### All-in-One Report
+```python
+bt.report("full_report.html")  # 10-panel dashboard
+```
 
+### Individual Charts
 ```python
 from marit_backtesting import (
+    # Core charts
     plot_equity_curve,
     plot_drawdown,
     plot_trailing_returns,
-    plot_weights,
+    
+    # Portfolio analysis
+    plot_weights,           # Monthly aggregated stacked bar
     plot_asset_returns,
-    plot_monthly_heatmap,
-    plot_quarterly_heatmap,
-    plot_yearly_returns,
-    generate_report,  # All-in-one dashboard
+    
+    # Returns analysis
+    plot_monthly_heatmap,   # With % annotations
+    plot_quarterly_heatmap, # With % annotations
+    plot_yearly_returns,    # With % annotations
+    
+    # Professional quant analytics
+    plot_rolling_sharpe,       # Rolling Sharpe with reference lines
+    plot_rolling_volatility,   # Regime detection
+    plot_returns_distribution, # Histogram with VaR/CVaR
+    plot_risk_contribution,    # Risk attribution by asset
 )
 
-# Generate single plot
-plot_equity_curve(bt, output_path="equity.html")
-
-# Generate full dashboard
-bt.report("full_report.html")
+# Example usage
+plot_rolling_sharpe(bt, window=126, output_path="sharpe.html")
+plot_returns_distribution(bt)  # Shows VaR 1%, VaR 5%, CVaR
 ```
 
 ## Fee Structure

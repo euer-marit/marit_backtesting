@@ -859,22 +859,24 @@ def generate_report(
     if bt.equity_curve is None:
         raise RuntimeError("Must call calculate_equity() first.")
     
-    # Create subplots
+    # Create 5x2 subplots for comprehensive report
     fig = make_subplots(
-        rows=4, cols=2,
+        rows=5, cols=2,
         subplot_titles=(
             "Equity Curve", "Drawdown",
-            "Trailing Returns", "Portfolio Weights",
+            "Monthly Weights (Avg)", "Rolling Sharpe (126d)",
             "Monthly Returns", "Quarterly Returns",
-            "Annual Returns", "Performance Metrics"
+            "Annual Returns", "Returns Distribution",
+            "Rolling Volatility (21d)", "Performance Metrics"
         ),
         specs=[
             [{"type": "scatter"}, {"type": "scatter"}],
-            [{"type": "scatter"}, {"type": "scatter"}],
+            [{"type": "bar"}, {"type": "scatter"}],
             [{"type": "heatmap"}, {"type": "heatmap"}],
-            [{"type": "bar"}, {"type": "table"}],
+            [{"type": "bar"}, {"type": "histogram"}],
+            [{"type": "scatter"}, {"type": "table"}],
         ],
-        vertical_spacing=0.08,
+        vertical_spacing=0.06,
         horizontal_spacing=0.08,
     )
     
@@ -898,81 +900,124 @@ def generate_report(
         showlegend=False,
     ), row=1, col=2)
     
-    # 3. Trailing Returns
-    trailing_6m = equity.pct_change(periods=6 * 21).dropna() * 100
-    trailing_12m = equity.pct_change(periods=12 * 21).dropna() * 100
-    fig.add_trace(go.Scatter(
-        x=trailing_6m.index, y=trailing_6m.values,
-        name="6M", line=dict(color=COLORS['warning'], width=1.5),
-    ), row=2, col=1)
-    fig.add_trace(go.Scatter(
-        x=trailing_12m.index, y=trailing_12m.values,
-        name="12M", line=dict(color=COLORS['primary'], width=2),
-    ), row=2, col=1)
-    
-    # 4. Weights (line chart for dashboard)
+    # 3. Monthly Weights (Stacked Bar Chart)
     weights = bt.weights.dropna()
-    for i, col in enumerate(weights.columns[:5]):  # Limit to 5 for readability
+    weights_monthly = weights.resample('ME').mean()
+    for i, col in enumerate(weights_monthly.columns):
         color = ASSET_COLORS[i % len(ASSET_COLORS)]
-        fig.add_trace(go.Scatter(
-            x=weights.index, y=weights[col].values,
-            name=col, line=dict(color=color, width=1.5),
-        ), row=2, col=2)
+        fig.add_trace(go.Bar(
+            x=weights_monthly.index, y=weights_monthly[col].values,
+            name=col, marker_color=color,
+        ), row=2, col=1)
+    fig.update_layout(barmode='stack')
     
-    # 5. Monthly Heatmap
+    # 4. Rolling Sharpe
+    returns = bt.net_returns
+    window = 126
+    rolling_mean = returns.rolling(window=window).mean()
+    rolling_std = returns.rolling(window=window).std()
+    rolling_sharpe = (rolling_mean * np.sqrt(bt.trading_days)) / rolling_std
+    rolling_sharpe = rolling_sharpe.dropna()
+    fig.add_trace(go.Scatter(
+        x=rolling_sharpe.index, y=rolling_sharpe.values,
+        name="Rolling Sharpe", line=dict(color=COLORS['primary'], width=1.5),
+        showlegend=False,
+    ), row=2, col=2)
+    
+    # 5. Monthly Heatmap WITH ANNOTATIONS
     monthly = equity.resample('ME').last().pct_change().dropna() * 100
     monthly_df = monthly.to_frame(name='return')
     monthly_df['Year'] = monthly_df.index.year
     monthly_df['Month'] = monthly_df.index.month
     pivot_m = monthly_df.pivot(index='Year', columns='Month', values='return')
     
+    # Create text annotations for monthly heatmap
+    text_m = [[f"{v:.1f}%" if not np.isnan(v) else "" for v in row] for row in pivot_m.values]
+    
     fig.add_trace(go.Heatmap(
-        z=pivot_m.values, x=list(range(1, 13)), y=pivot_m.index,
+        z=pivot_m.values, 
+        x=['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][:pivot_m.shape[1]], 
+        y=pivot_m.index,
         colorscale='RdYlGn', zmid=0, showscale=False,
+        text=text_m,
+        texttemplate="%{text}",
+        textfont={"size": 8},
     ), row=3, col=1)
     
-    # 6. Quarterly Heatmap
+    # 6. Quarterly Heatmap WITH ANNOTATIONS
     quarterly = equity.resample('QE').last().pct_change().dropna() * 100
     quarterly_df = quarterly.to_frame(name='return')
     quarterly_df['Year'] = quarterly_df.index.year
     quarterly_df['Quarter'] = quarterly_df.index.quarter
     pivot_q = quarterly_df.pivot(index='Year', columns='Quarter', values='return')
     
+    # Create text annotations for quarterly heatmap
+    text_q = [[f"{v:.1f}%" if not np.isnan(v) else "" for v in row] for row in pivot_q.values]
+    
     fig.add_trace(go.Heatmap(
-        z=pivot_q.values, x=['Q1', 'Q2', 'Q3', 'Q4'][:len(pivot_q.columns)], y=pivot_q.index,
+        z=pivot_q.values, 
+        x=['Q1', 'Q2', 'Q3', 'Q4'][:len(pivot_q.columns)], 
+        y=pivot_q.index,
         colorscale='RdYlGn', zmid=0, showscale=False,
+        text=text_q,
+        texttemplate="%{text}",
+        textfont={"size": 10},
     ), row=3, col=2)
     
-    # 7. Annual Returns
+    # 7. Annual Returns WITH ANNOTATIONS
     yearly = equity.resample('YE').last().pct_change().dropna() * 100
     colors_bar = [COLORS['success'] if v >= 0 else COLORS['danger'] for v in yearly.values]
     fig.add_trace(go.Bar(
         x=yearly.index.year, y=yearly.values,
         marker_color=colors_bar, showlegend=False,
+        text=[f"{v:.1f}%" for v in yearly.values],
+        textposition='outside',
+        textfont={"size": 9},
     ), row=4, col=1)
     
-    # 8. Metrics Table
+    # 8. Returns Distribution with VaR
+    returns_pct = bt.net_returns * 100
+    var_5 = returns_pct.quantile(0.05)
+    fig.add_trace(go.Histogram(
+        x=returns_pct.values, nbinsx=50,
+        marker_color=COLORS['primary'], opacity=0.7,
+        showlegend=False,
+    ), row=4, col=2)
+    
+    # 9. Rolling Volatility
+    rolling_vol = returns.rolling(window=21).std() * np.sqrt(bt.trading_days) * 100
+    rolling_vol = rolling_vol.dropna()
+    fig.add_trace(go.Scatter(
+        x=rolling_vol.index, y=rolling_vol.values,
+        name="Rolling Vol", fill='tozeroy',
+        line=dict(color=COLORS['warning'], width=1.5),
+        fillcolor='rgba(255, 193, 7, 0.3)',
+        showlegend=False,
+    ), row=5, col=1)
+    
+    # 10. Metrics Table
     metrics = bt.get_performance_metrics()
     fig.add_trace(go.Table(
         header=dict(values=["Metric", "Value"], fill_color=COLORS['primary'], 
                     font=dict(color='white', size=11), align='left'),
         cells=dict(
             values=[
-                list(metrics.index)[:10],  # Limit rows
-                [str(v) for v in metrics.values[:10]],
+                list(metrics.index),
+                [str(v) for v in metrics.values],
             ],
             fill_color=COLORS['light'],
             align='left',
             font=dict(size=10),
         ),
-    ), row=4, col=2)
+    ), row=5, col=2)
     
     fig.update_layout(
         title=dict(text="VectorBacktester Report", font=dict(size=24)),
         template="plotly_white",
-        height=1400,
+        height=1800,
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=-0.02, xanchor="center", x=0.5),
     )
     
     return _show_or_save(fig, output_path, show)
+
