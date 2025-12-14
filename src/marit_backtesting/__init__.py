@@ -22,10 +22,14 @@ from marit_backtesting.reporting import (
     plot_monthly_heatmap,
     plot_quarterly_heatmap,
     plot_yearly_returns,
+    plot_rolling_sharpe,
+    plot_rolling_volatility,
+    plot_returns_distribution,
+    plot_risk_contribution,
     generate_report,
 )
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __all__ = [
     "VectorBacktester",
     "plot_equity_curve",
@@ -36,5 +40,10 @@ __all__ = [
     "plot_monthly_heatmap",
     "plot_quarterly_heatmap",
     "plot_yearly_returns",
+    "plot_rolling_sharpe",
+    "plot_rolling_volatility",
+    "plot_returns_distribution",
+    "plot_risk_contribution",
     "generate_report",
 ]
+

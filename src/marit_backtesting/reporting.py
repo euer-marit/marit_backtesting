@@ -249,16 +249,20 @@ def plot_trailing_returns(
 
 def plot_weights(
     bt: "VectorBacktester",
+    freq: str = "ME",
     output_path: str | None = None,
     show: bool = True,
 ) -> "go.Figure":
     """
-    Plot portfolio weights over time as stacked area chart.
+    Plot portfolio weights as aggregated stacked bar chart.
     
     Parameters
     ----------
     bt : VectorBacktester
         Backtester instance with weights.
+    freq : str, optional
+        Aggregation frequency: 'ME' (monthly), 'QE' (quarterly), 'YE' (yearly).
+        Default is 'ME' (monthly).
     output_path : str, optional
         Path to save HTML file.
     show : bool
@@ -272,27 +276,31 @@ def plot_weights(
     
     weights = bt.weights.dropna()
     
+    # Aggregate to reduce noise
+    weights_agg = weights.resample(freq).mean()
+    
+    freq_labels = {'ME': 'Monthly', 'QE': 'Quarterly', 'YE': 'Yearly'}
+    freq_label = freq_labels.get(freq, freq)
+    
     fig = go.Figure()
     
-    for i, col in enumerate(weights.columns):
+    for i, col in enumerate(weights_agg.columns):
         color = ASSET_COLORS[i % len(ASSET_COLORS)]
-        fig.add_trace(go.Scatter(
-            x=weights.index,
-            y=weights[col].values,
+        fig.add_trace(go.Bar(
+            x=weights_agg.index,
+            y=weights_agg[col].values,
             name=col,
-            mode='lines',
-            stackgroup='one',
-            line=dict(width=0.5, color=color),
-            hovertemplate=f"<b>{col}</b><br>Date: %{{x}}<br>Weight: %{{y:.2%}}<extra></extra>",
+            marker_color=color,
+            hovertemplate=f"<b>{col}</b><br>Period: %{{x}}<br>Avg Weight: %{{y:.1%}}<extra></extra>",
         ))
     
     fig.update_layout(
-        title=dict(text="Portfolio Weights Over Time", font=dict(size=20)),
-        xaxis_title="Date",
+        barmode='stack',
+        title=dict(text=f"{freq_label} Average Portfolio Weights", font=dict(size=20)),
+        xaxis_title="Period",
         yaxis_title="Weight",
         yaxis=dict(tickformat='.0%'),
         template="plotly_white",
-        hovermode="x unified",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         height=450,
     )
@@ -530,6 +538,295 @@ def plot_yearly_returns(
         yaxis_title="Return [%]",
         template="plotly_white",
         height=400,
+    )
+    
+    return _show_or_save(fig, output_path, show)
+
+
+def plot_rolling_sharpe(
+    bt: "VectorBacktester",
+    window: int = 126,
+    output_path: str | None = None,
+    show: bool = True,
+) -> "go.Figure":
+    """
+    Plot rolling Sharpe ratio over time.
+    
+    Parameters
+    ----------
+    bt : VectorBacktester
+        Backtester instance with calculated equity.
+    window : int, optional
+        Rolling window in trading days (default 126 = ~6 months).
+    output_path : str, optional
+        Path to save HTML file.
+    show : bool
+        Whether to display the chart inline.
+    
+    Returns
+    -------
+    plotly.graph_objects.Figure
+    """
+    _check_plotly()
+    
+    if bt.net_returns is None:
+        raise RuntimeError("Must call calculate_equity() first.")
+    
+    returns = bt.net_returns
+    trading_days = bt.trading_days
+    
+    # Calculate rolling Sharpe
+    rolling_mean = returns.rolling(window=window).mean()
+    rolling_std = returns.rolling(window=window).std()
+    rolling_sharpe = (rolling_mean * np.sqrt(trading_days)) / rolling_std
+    rolling_sharpe = rolling_sharpe.dropna()
+    
+    fig = go.Figure()
+    
+    fig.add_trace(go.Scatter(
+        x=rolling_sharpe.index,
+        y=rolling_sharpe.values,
+        name=f"Rolling Sharpe ({window}d)",
+        line=dict(color=COLORS['primary'], width=2),
+        hovertemplate="Date: %{x}<br>Sharpe: %{y:.2f}<extra></extra>",
+    ))
+    
+    # Add reference lines
+    fig.add_hline(y=0, line_dash="dash", line_color="gray", line_width=1)
+    fig.add_hline(y=1, line_dash="dot", line_color=COLORS['success'], 
+                  annotation_text="Sharpe = 1.0", annotation_position="right")
+    fig.add_hline(y=2, line_dash="dot", line_color=COLORS['info'],
+                  annotation_text="Sharpe = 2.0", annotation_position="right")
+    
+    # Add fill color based on positive/negative
+    fig.add_trace(go.Scatter(
+        x=rolling_sharpe.index,
+        y=rolling_sharpe.clip(lower=0).values,
+        fill='tozeroy',
+        fillcolor='rgba(40, 167, 69, 0.2)',
+        line=dict(width=0),
+        showlegend=False,
+        hoverinfo='skip',
+    ))
+    
+    fig.add_trace(go.Scatter(
+        x=rolling_sharpe.index,
+        y=rolling_sharpe.clip(upper=0).values,
+        fill='tozeroy',
+        fillcolor='rgba(220, 53, 69, 0.2)',
+        line=dict(width=0),
+        showlegend=False,
+        hoverinfo='skip',
+    ))
+    
+    fig.update_layout(
+        title=dict(text=f"Rolling Sharpe Ratio ({window}-day)", font=dict(size=20)),
+        xaxis_title="Date",
+        yaxis_title="Sharpe Ratio",
+        template="plotly_white",
+        height=400,
+    )
+    
+    return _show_or_save(fig, output_path, show)
+
+
+def plot_rolling_volatility(
+    bt: "VectorBacktester",
+    window: int = 21,
+    output_path: str | None = None,
+    show: bool = True,
+) -> "go.Figure":
+    """
+    Plot rolling volatility (annualized) over time.
+    
+    Parameters
+    ----------
+    bt : VectorBacktester
+        Backtester instance with calculated equity.
+    window : int, optional
+        Rolling window in trading days (default 21 = ~1 month).
+    output_path : str, optional
+        Path to save HTML file.
+    show : bool
+        Whether to display the chart inline.
+    
+    Returns
+    -------
+    plotly.graph_objects.Figure
+    """
+    _check_plotly()
+    
+    if bt.net_returns is None:
+        raise RuntimeError("Must call calculate_equity() first.")
+    
+    returns = bt.net_returns
+    trading_days = bt.trading_days
+    
+    # Calculate rolling volatility (annualized)
+    rolling_vol = returns.rolling(window=window).std() * np.sqrt(trading_days) * 100
+    rolling_vol = rolling_vol.dropna()
+    
+    # Calculate average volatility
+    avg_vol = rolling_vol.mean()
+    
+    fig = go.Figure()
+    
+    fig.add_trace(go.Scatter(
+        x=rolling_vol.index,
+        y=rolling_vol.values,
+        name=f"Rolling Vol ({window}d)",
+        fill='tozeroy',
+        line=dict(color=COLORS['warning'], width=2),
+        fillcolor='rgba(255, 193, 7, 0.3)',
+        hovertemplate="Date: %{x}<br>Vol: %{y:.1f}%<extra></extra>",
+    ))
+    
+    fig.add_hline(
+        y=avg_vol, 
+        line_dash="dash", 
+        line_color=COLORS['danger'],
+        annotation_text=f"Avg: {avg_vol:.1f}%",
+        annotation_position="right",
+    )
+    
+    fig.update_layout(
+        title=dict(text=f"Rolling Annualized Volatility ({window}-day)", font=dict(size=20)),
+        xaxis_title="Date",
+        yaxis_title="Volatility [%]",
+        template="plotly_white",
+        height=400,
+    )
+    
+    return _show_or_save(fig, output_path, show)
+
+
+def plot_returns_distribution(
+    bt: "VectorBacktester",
+    output_path: str | None = None,
+    show: bool = True,
+) -> "go.Figure":
+    """
+    Plot returns distribution histogram with VaR markers.
+    
+    Parameters
+    ----------
+    bt : VectorBacktester
+        Backtester instance with calculated equity.
+    output_path : str, optional
+        Path to save HTML file.
+    show : bool
+        Whether to display the chart inline.
+    
+    Returns
+    -------
+    plotly.graph_objects.Figure
+    """
+    _check_plotly()
+    
+    if bt.net_returns is None:
+        raise RuntimeError("Must call calculate_equity() first.")
+    
+    returns = bt.net_returns * 100  # Convert to percentage
+    
+    # Calculate statistics
+    var_5 = returns.quantile(0.05)
+    var_1 = returns.quantile(0.01)
+    cvar_5 = returns[returns <= var_5].mean()
+    mean_ret = returns.mean()
+    
+    fig = go.Figure()
+    
+    fig.add_trace(go.Histogram(
+        x=returns.values,
+        nbinsx=50,
+        name="Daily Returns",
+        marker_color=COLORS['primary'],
+        opacity=0.7,
+        hovertemplate="Return: %{x:.2f}%<br>Count: %{y}<extra></extra>",
+    ))
+    
+    # Add VaR lines
+    fig.add_vline(x=var_5, line_dash="dash", line_color=COLORS['warning'], line_width=2,
+                  annotation_text=f"VaR 5%: {var_5:.2f}%", annotation_position="top")
+    fig.add_vline(x=var_1, line_dash="dash", line_color=COLORS['danger'], line_width=2,
+                  annotation_text=f"VaR 1%: {var_1:.2f}%", annotation_position="bottom")
+    fig.add_vline(x=mean_ret, line_dash="solid", line_color=COLORS['success'], line_width=2,
+                  annotation_text=f"Mean: {mean_ret:.3f}%", annotation_position="top right")
+    
+    # Add CVaR annotation
+    fig.add_annotation(
+        x=cvar_5, y=0,
+        text=f"CVaR 5%: {cvar_5:.2f}%",
+        showarrow=True,
+        arrowhead=2,
+        arrowcolor=COLORS['danger'],
+        font=dict(color=COLORS['danger']),
+    )
+    
+    fig.update_layout(
+        title=dict(text="Daily Returns Distribution", font=dict(size=20)),
+        xaxis_title="Daily Return [%]",
+        yaxis_title="Frequency",
+        template="plotly_white",
+        height=450,
+        showlegend=False,
+    )
+    
+    return _show_or_save(fig, output_path, show)
+
+
+def plot_risk_contribution(
+    bt: "VectorBacktester",
+    output_path: str | None = None,
+    show: bool = True,
+) -> "go.Figure":
+    """
+    Plot risk contribution by asset (based on variance contribution).
+    
+    Parameters
+    ----------
+    bt : VectorBacktester
+        Backtester instance with weights and returns.
+    output_path : str, optional
+        Path to save HTML file.
+    show : bool
+        Whether to display the chart inline.
+    
+    Returns
+    -------
+    plotly.graph_objects.Figure
+    """
+    _check_plotly()
+    
+    # Calculate average weights
+    avg_weights = bt.weights.mean()
+    
+    # Calculate variance contribution (simplified)
+    asset_vol = bt.returns.std() * np.sqrt(bt.trading_days)
+    weighted_vol = avg_weights * asset_vol
+    total_weighted_vol = weighted_vol.sum()
+    risk_contrib = (weighted_vol / total_weighted_vol * 100).sort_values(ascending=True)
+    
+    fig = go.Figure()
+    
+    colors = [ASSET_COLORS[i % len(ASSET_COLORS)] for i in range(len(risk_contrib))]
+    
+    fig.add_trace(go.Bar(
+        x=risk_contrib.values,
+        y=risk_contrib.index,
+        orientation='h',
+        marker_color=colors,
+        text=[f"{v:.1f}%" for v in risk_contrib.values],
+        textposition='outside',
+        hovertemplate="Asset: %{y}<br>Risk Contrib: %{x:.1f}%<extra></extra>",
+    ))
+    
+    fig.update_layout(
+        title=dict(text="Risk Contribution by Asset", font=dict(size=20)),
+        xaxis_title="Risk Contribution [%]",
+        yaxis_title="Asset",
+        template="plotly_white",
+        height=max(300, len(risk_contrib) * 40 + 100),
     )
     
     return _show_or_save(fig, output_path, show)
